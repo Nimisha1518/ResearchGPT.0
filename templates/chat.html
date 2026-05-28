@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}AI Chatroom - ResearchGPT{% endblock %}
+{% block page_title %}AI Research Assistant{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Custom styling adjustments for a seamless full-height chat experience */
+    .content-viewport {
+        padding: 0 !important;
+        height: calc(100vh - 70px) !important;
+        overflow: hidden;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="chat-layout-container">
+    <!-- Chat Workspace -->
+    <div class="chat-main-workspace d-flex flex-column">
+        <!-- Top Toolbar -->
+        <div class="chat-toolbar d-flex align-items-center justify-content-between px-4 py-2 border-bottom">
+            <div class="d-flex align-items-center gap-3">
+                <label for="focusSelect" class="text-muted small fw-bold mb-0 text-nowrap">
+                    <i class="fa-solid fa-crosshairs text-primary me-1"></i> QUERY FOCUS:
+                </label>
+                <select id="focusSelect" class="form-select form-select-sm bg-dark border-secondary text-white rounded-pill px-3" style="max-width: 300px;">
+                    <option value="">All Uploaded Papers</option>
+                    {% if files %}
+                        {% for file in files %}
+                            <option value="{{ file.filename }}">{{ file.filename }}</option>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+            
+            <button class="btn btn-outline-danger btn-sm rounded-pill px-3" id="clearChatBtn">
+                <i class="fa-solid fa-trash-can me-1"></i> Clear History
+            </button>
+        </div>
+
+        <!-- Scrollable Messages Window -->
+        <div class="chat-messages-container flex-grow-1 p-4" id="chatMessages">
+            <!-- Welcome Message -->
+            <div class="chat-message system mb-4">
+                <div class="message-bubble glass-card p-4 max-width-600">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="ai-avatar bg-primary-soft text-primary me-3">
+                            <i class="fa-solid fa-brain-circuit"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-white mb-0">ResearchGPT Assistant</h5>
+                            <span class="text-muted small">Powered by RAG & Gemini API</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        Ask any complex question across your document library. I will perform semantic search, find the most relevant paragraphs, synthesize a logical answer, and cite the papers directly.
+                    </p>
+                    
+                    <h6 class="text-white small mb-2"><i class="fa-solid fa-lightbulb text-warning me-1"></i> Try asking:</h6>
+                    <div class="d-flex flex-column gap-2" id="suggestedPrompts">
+                        <button class="btn btn-dark-soft btn-sm text-start prompt-suggestion">"What is the main methodology proposed in the papers?"</button>
+                        <button class="btn btn-dark-soft btn-sm text-start prompt-suggestion">"Summarize the core results and findings."</button>
+                        <button class="btn btn-dark-soft btn-sm text-start prompt-suggestion">"Compare the limitations discussed in the literature."</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Input Form -->
+        <div class="chat-input-wrapper p-4 border-top">
+            <form id="chatForm" class="d-flex gap-2 align-items-center">
+                <div class="input-group">
+                    <input type="text" id="userInput" class="form-control bg-dark border-secondary text-white px-4 py-3" placeholder="Ask a question about your papers..." autocomplete="off">
+                    <button type="submit" class="btn btn-primary px-4" id="sendBtn">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </form>
+            <div class="d-flex justify-content-between align-items-center mt-2 px-1">
+                <span class="text-muted small" id="currentFocusLabel">Focusing on: All Papers</span>
+                <span class="text-muted small" id="typingIndicator" style="display: none;">
+                    <i class="fa-solid fa-circle-notch fa-spin text-primary me-1"></i> Searching & synthesizing answers...
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Citations Inspector Sidebar (Right Side) -->
+    <div class="chat-citations-sidebar border-start p-4 d-none d-lg-block" id="citationsSidebar">
+        <h5 class="text-white mb-3"><i class="fa-solid fa-quote-right text-gradient me-2"></i>Sources Inspector</h5>
+        <p class="text-muted small mb-4">
+            Click on any citation index inside the AI's response to inspect the exact retrieved text chunk and its page references.
+        </p>
+        
+        <div class="citations-list d-flex flex-column gap-3" id="citationsList">
+            <div class="empty-citations text-center py-5 text-muted">
+                <i class="fa-solid fa-receipt fs-1 mb-2"></i>
+                <p class="small">No citations active. Ask a question to view retrieved passages.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const chatForm = document.getElementById('chatForm');
+    const userInput = document.getElementById('userInput');
+    const chatMessages = document.getElementById('chatMessages');
+    const focusSelect = document.getElementById('focusSelect');
+    const currentFocusLabel = document.getElementById('currentFocusLabel');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const citationsList = document.getElementById('citationsList');
+    const clearChatBtn = document.getElementById('clearChatBtn');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // Keep state of chat history (stateless memory passed to API)
+    let chatHistory = [];
+    // Keep reference to latest retrieved sources
+    let activeSources = [];
+
+    // URL parameters focusing check
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const focusPaper = urlParams.get('focus');
+        if (focusPaper) {
+            focusSelect.value = focusPaper;
+            updateFocusLabel();
+        }
+    });
+
+    focusSelect.addEventListener('change', updateFocusLabel);
+
+    function updateFocusLabel() {
+        const val = focusSelect.value;
+        if (val) {
+            currentFocusLabel.textContent = `Focusing on: ${val}`;
+        } else {
+            currentFocusLabel.textContent = "Focusing on: All Papers";
+        }
+    }
+
+    // Set suggested prompts
+    document.querySelectorAll('.prompt-suggestion').forEach(btn => {
+        btn.addEventListener('click', () => {
+            userInput.value = btn.textContent.replace(/"/g, '');
+            userInput.focus();
+        });
+    });
+
+    // Clear Chat
+    clearChatBtn.addEventListener('click', () => {
+        chatHistory = [];
+        activeSources = [];
+        // Reset chat screen
+        chatMessages.innerHTML = `
+            <div class="chat-message system mb-4">
+                <div class="message-bubble glass-card p-4 max-width-600">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="ai-avatar bg-primary-soft text-primary me-3">
+                            <i class="fa-solid fa-brain-circuit"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-white mb-0">ResearchGPT Assistant</h5>
+                            <span class="text-muted small">Powered by RAG & Gemini API</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-3">
+                        Chat history cleared. Send a new message to start a clean search.
+                    </p>
+                </div>
+            </div>
+        `;
+        resetCitationsSidebar();
+    });
+
+    function resetCitationsSidebar() {
+        citationsList.innerHTML = `
+            <div class="empty-citations text-center py-5 text-muted">
+                <i class="fa-solid fa-receipt fs-1 mb-2"></i>
+                <p class="small">No citations active. Ask a question to view retrieved passages.</p>
+            </div>
+        `;
+    }
+
+    // Format Markdown styling including citation brackets [1], [2], etc.
+    function parseAiResponse(text) {
+        if (!text) return "";
+        let formatted = text
+            .replace(/\n/g, '<br>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/### (.*?)(?:<br>|$)/g, '<h6 class="text-info mt-3">$1</h6>')
+            .replace(/## (.*?)(?:<br>|$)/g, '<h5 class="text-primary mt-3">$1</h5>')
+            // Match citation brackets e.g. [1], [2], [10]
+            .replace(/\[(\d+)\]/g, '<a href="#cite-$1" class="citation-tag" onclick="highlightCitation(event, $1)">[$1]</a>');
+        return formatted;
+    }
+
+    function highlightCitation(e, idx) {
+        e.preventDefault();
+        const element = document.getElementById(`source-card-${idx}`);
+        if (element) {
+            // Scroll citations sidebar container to card
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Add a flashing glow effect
+            element.classList.add('citation-flash');
+            setTimeout(() => {
+                element.classList.remove('citation-flash');
+            }, 2000);
+        }
+    }
+
+    // Submit Chat message
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const query = userInput.value.trim();
+        if (!query) return;
+
+        // Add user message to UI
+        appendMessage('user', query);
+        userInput.value = '';
+
+        // Show typing indicator
+        typingIndicator.style.display = 'inline-block';
+        sendBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    query: query,
+                    chat_history: chatHistory,
+                    filename: focusSelect.value
+                })
+            });
+
+            const data = await response.json();
+            typingIndicator.style.display = 'none';
+            sendBtn.disabled = false;
+
+            if (data.success) {
+                // Save sources
+                activeSources = data.sources;
+                
+                // Add assistant response to UI
+                appendMessage('assistant', data.answer);
+                
+                // Save conversation memory
+                chatHistory.push(["user", query]);
+                chatHistory.push(["assistant", data.answer]);
+                
+                // Render citations in the right panel
+                renderCitations(data.sources);
+            } else {
+                appendMessage('system-error', data.error || "An unknown error occurred.");
+            }
+        } catch (err) {
+            console.error("Chat request failed:", err);
+            typingIndicator.style.display = 'none';
+            sendBtn.disabled = false;
+            appendMessage('system-error', "Failed to connect to AI server. Please verify your connection.");
+        }
+    });
+
+    function appendMessage(role, text) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-message ${role} mb-3`;
+        
+        let content = '';
+        if (role === 'user') {
+            content = `
+                <div class="message-bubble bg-primary text-white p-3 max-width-600 ms-auto rounded-4">
+                    <p class="mb-0 text-wrap">${text}</p>
+                </div>
+            `;
+        } else if (role === 'assistant') {
+            content = `
+                <div class="message-bubble glass-card p-3 max-width-600 rounded-4">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="ai-avatar bg-primary-soft text-primary me-2 fs-6-sm">
+                            <i class="fa-solid fa-brain-circuit"></i>
+                        </div>
+                        <span class="text-white small fw-bold">ResearchGPT</span>
+                    </div>
+                    <div class="message-text text-white-80 text-wrap">${parseAiResponse(text)}</div>
+                </div>
+            `;
+        } else {
+            // System errors
+            content = `
+                <div class="message-bubble bg-danger-soft text-danger p-3 max-width-600 mx-auto rounded-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fa-solid fa-circle-exclamation me-2"></i>
+                        <p class="mb-0 small">${text}</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        msgDiv.innerHTML = content;
+        chatMessages.appendChild(msgDiv);
+        
+        // Scroll chat to bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function renderCitations(sources) {
+        if (!sources || sources.length === 0) {
+            resetCitationsSidebar();
+            return;
+        }
+
+        citationsList.innerHTML = '';
+        sources.forEach(src => {
+            const card = document.createElement('div');
+            card.className = 'glass-card citation-card p-3';
+            card.id = `source-card-${src.chunk_index}`;
+            card.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-primary text-white px-2 py-1">Source [${src.chunk_index}]</span>
+                    <span class="text-muted small">Score: ${(src.score * 100).toFixed(1)}%</span>
+                </div>
+                <div class="citation-filename text-info small text-truncate mb-1" title="${src.filename}">
+                    <i class="fa-solid fa-file-pdf text-danger me-1"></i> ${src.filename}
+                </div>
+                <div class="citation-page text-muted small mb-2">
+                    Page: <span class="text-white">${src.page}</span>
+                </div>
+                <div class="citation-content text-muted small p-2 bg-dark-soft rounded" style="max-height: 120px; overflow-y: auto;">
+                    "${src.content}"
+                </div>
+            `;
+            citationsList.appendChild(card);
+        });
+    }
+</script>
+{% endblock %}

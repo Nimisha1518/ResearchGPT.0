@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}Upload & Manage Papers - ResearchGPT{% endblock %}
+{% block page_title %}Document Library{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Upload Dropzone Card -->
+    <div class="col-lg-5">
+        <div class="glass-card p-4">
+            <h4 class="card-section-title text-white mb-3">Add Research Papers</h4>
+            <p class="text-muted small mb-4">
+                Upload one or multiple research papers in PDF format. The system will automatically parse the text, generate vector embeddings, and store them in the Chroma vector database.
+            </p>
+            
+            <!-- Upload Form -->
+            <form id="uploadForm" class="upload-dropzone-form">
+                <div class="upload-dropzone" id="dropzone">
+                    <input type="file" id="fileInput" name="files" multiple accept=".pdf" class="d-none">
+                    <i class="fa-solid fa-cloud-arrow-up dropzone-icon mb-3"></i>
+                    <h5 class="text-white mb-2">Drag & Drop PDFs Here</h5>
+                    <p class="text-muted small mb-3">or click to browse your local files</p>
+                    <button type="button" class="btn btn-outline-primary btn-sm px-4" onclick="document.getElementById('fileInput').click()">
+                        Select Files
+                    </button>
+                </div>
+            </form>
+
+            <!-- Selection and Upload Feedback -->
+            <div id="selectedFilesArea" class="mt-4 d-none">
+                <h6 class="text-white mb-2">Selected Files:</h6>
+                <div class="selected-files-list list-group mb-3" id="selectedFilesList"></div>
+                <div class="d-grid">
+                    <button type="button" class="btn btn-primary" id="startUploadBtn">
+                        <i class="fa-solid fa-server me-2"></i>Index Files in ChromaDB
+                    </button>
+                </div>
+            </div>
+
+            <!-- Ingestion Progress / Spinner -->
+            <div id="uploadProgressArea" class="mt-4 d-none">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5 class="text-white mb-2">Generating Embeddings...</h5>
+                    <p class="text-muted small mb-0 px-4">
+                        Extracting pages, generating sentence embeddings, and saving to database. This may take up to a minute for larger papers.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Uploaded Papers Table Card -->
+    <div class="col-lg-7">
+        <div class="glass-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="card-section-title text-white mb-0">Indexed Papers</h4>
+                <button class="btn btn-sm btn-icon-only text-muted hover-white" onclick="refreshFilesList()">
+                    <i class="fa-solid fa-rotate"></i>
+                </button>
+            </div>
+            
+            <div class="table-responsive mt-3" style="max-height: 500px; overflow-y: auto;">
+                <table class="table custom-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Document Name</th>
+                            <th>File Size</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="papersTableBody">
+                        {% if files %}
+                            {% for file in files %}
+                                <tr id="row-{{ loop.index }}">
+                                    <td>
+                                        <div class="d-flex align-items-center overflow-hidden">
+                                            <i class="fa-solid fa-file-pdf text-danger fs-4 me-3 flex-shrink-0"></i>
+                                            <span class="file-name text-white text-truncate" title="{{ file.filename }}">{{ file.filename }}</span>
+                                        </div>
+                                    </td>
+                                    <td><span class="text-muted small">{{ file.size_mb }} MB</span></td>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button class="btn btn-sm btn-outline-info" onclick="summarizePaper('{{ file.filename }}')">
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Summarize
+                                            </button>
+                                            <button class="btn btn-sm btn-icon-only btn-outline-danger" onclick="deletePaper('{{ file.filename }}')">
+                                                <i class="fa-regular fa-trash-can"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr id="empty-table-row">
+                                <td colspan="3" class="text-center py-5 text-muted">
+                                    <i class="fa-solid fa-folder-open fs-1 mb-3 text-muted"></i>
+                                    <p class="mb-0">No documents indexed in your library.</p>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summarization Result Modal -->
+<div class="modal fade custom-modal" id="summaryModal" tabindex="-1" aria-labelledby="summaryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content glass-card">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title text-white" id="summaryModalLabel">
+                    <i class="fa-solid fa-wand-magic-sparkles text-gradient me-2"></i>Executive Summary
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <div class="mb-3 text-muted small" id="summaryPaperTitle">Paper: Loading...</div>
+                
+                <!-- Loading State inside Modal -->
+                <div id="summaryModalLoading" class="text-center py-5">
+                    <div class="spinner-border text-info mb-3" role="status">
+                        <span class="visually-hidden">Summarizing...</span>
+                    </div>
+                    <p class="text-muted small">Reading passages and synthesizing overview. Please wait...</p>
+                </div>
+                
+                <!-- Markdown rendered summary content -->
+                <div id="summaryModalContent" class="text-white d-none markdown-body"></div>
+            </div>
+            <div class="modal-footer border-top-0 pt-0">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close Summary</button>
+                <a href="{{ url_for('chat_page') }}" class="btn btn-primary btn-sm" id="chatWithPaperBtn">Chat With Paper</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Handle Dropzone actions
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const selectedFilesArea = document.getElementById('selectedFilesArea');
+    const selectedFilesList = document.getElementById('selectedFilesList');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadProgressArea = document.getElementById('uploadProgressArea');
+    const startUploadBtn = document.getElementById('startUploadBtn');
+
+    let filesQueue = [];
+
+    // Drag-and-drop mechanics
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+        }, false);
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFilesSelection(files);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        handleFilesSelection(e.target.files);
+    });
+
+    function handleFilesSelection(files) {
+        filesQueue = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf');
+        
+        if (filesQueue.length === 0) {
+            alert("Only PDF files are supported!");
+            return;
+        }
+
+        selectedFilesList.innerHTML = '';
+        filesQueue.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'list-group-item bg-dark-soft border-0 text-white d-flex justify-content-between align-items-center mb-2 rounded';
+            item.innerHTML = `
+                <div class="d-flex align-items-center overflow-hidden">
+                    <i class="fa-solid fa-file-pdf text-danger me-2"></i>
+                    <span class="text-truncate">${file.name}</span>
+                </div>
+                <span class="badge bg-secondary-soft text-muted">${(file.size / (1024*1024)).toFixed(2)} MB</span>
+            `;
+            selectedFilesList.appendChild(item);
+        });
+
+        selectedFilesArea.classList.remove('d-none');
+        dropzone.classList.add('d-none');
+    }
+
+    // Trigger Ingestion Upload
+    startUploadBtn.addEventListener('click', async () => {
+        if (filesQueue.length === 0) return;
+        
+        selectedFilesArea.classList.add('d-none');
+        uploadProgressArea.classList.remove('d-none');
+
+        const formData = new FormData();
+        filesQueue.forEach(file => {
+            formData.append('files', file);
+        });
+
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                // Done! Refresh page to show files in table & sidebar
+                window.location.reload();
+            } else {
+                alert("Upload failed: " + data.error);
+                resetUploadView();
+            }
+        } catch (err) {
+            console.error("Upload error:", err);
+            alert("Upload request failed. Check server logs.");
+            resetUploadView();
+        }
+    });
+
+    function resetUploadView() {
+        uploadProgressArea.classList.add('d-none');
+        dropzone.classList.remove('d-none');
+        selectedFilesArea.classList.add('d-none');
+        filesQueue = [];
+    }
+
+    // Modal Summarization Function
+    async function summarizePaper(filename) {
+        const modal = new bootstrap.Modal(document.getElementById('summaryModal'));
+        const modalTitle = document.getElementById('summaryPaperTitle');
+        const modalLoading = document.getElementById('summaryModalLoading');
+        const modalContent = document.getElementById('summaryModalContent');
+        const chatBtn = document.getElementById('chatWithPaperBtn');
+
+        modalTitle.textContent = `Paper: ${filename}`;
+        modalLoading.classList.remove('d-none');
+        modalContent.classList.add('d-none');
+        
+        // Setup direct chat button href
+        chatBtn.href = `/chat?focus=${encodeURIComponent(filename)}`;
+
+        modal.show();
+
+        try {
+            const response = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ filename: filename })
+            });
+
+            const data = await response.json();
+            modalLoading.classList.add('d-none');
+            modalContent.classList.remove('d-none');
+
+            if (data.success) {
+                // Parse markdown simple conversion for modal
+                modalContent.innerHTML = formatMarkdown(data.summary);
+            } else {
+                modalContent.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            }
+        } catch (err) {
+            console.error("Summary request failed:", err);
+            modalLoading.classList.add('d-none');
+            modalContent.classList.remove('d-none');
+            modalContent.innerHTML = `<div class="alert alert-danger">Failed to connect to summarization API.</div>`;
+        }
+    }
+
+    // Helper function to format basic Markdown to HTML
+    function formatMarkdown(text) {
+        if (!text) return "";
+        let html = text
+            .replace(/\n/g, '<br>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/### (.*?)(?:<br>|$)/g, '<h5 class="text-info mt-3">$1</h5>')
+            .replace(/## (.*?)(?:<br>|$)/g, '<h4 class="text-primary mt-3">$1</h4>')
+            .replace(/# (.*?)(?:<br>|$)/g, '<h3 class="text-white mt-4">$1</h3>')
+            .replace(/- (.*?)(?:<br>|$)/g, '<div class="ps-3 d-flex align-items-start mb-1"><i class="fa-solid fa-circle-dot text-primary-soft me-2 mt-1 fs-6-sm"></i><div>$1</div></div>')
+            .replace(/^\d+\.\s(.*)/gm, '<li>$1</li>');
+        return html;
+    }
+
+    async function refreshFilesList() {
+        try {
+            const response = await fetch('/api/files');
+            const data = await response.json();
+            if (data.success) {
+                const tbody = document.getElementById('papersTableBody');
+                tbody.innerHTML = '';
+                
+                if (data.files.length > 0) {
+                    data.files.forEach((file, index) => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>
+                                <div class="d-flex align-items-center overflow-hidden">
+                                    <i class="fa-solid fa-file-pdf text-danger fs-4 me-3 flex-shrink-0"></i>
+                                    <span class="file-name text-white text-truncate" title="${file.filename}">${file.filename}</span>
+                                </div>
+                            </td>
+                            <td><span class="text-muted small">${file.size_mb} MB</span></td>
+                            <td class="text-end">
+                                <div class="d-flex gap-2 justify-content-end">
+                                    <button class="btn btn-sm btn-outline-info" onclick="summarizePaper('${file.filename}')">
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Summarize
+                                    </button>
+                                    <button class="btn btn-sm btn-icon-only btn-outline-danger" onclick="deletePaper('${file.filename}')">
+                                        <i class="fa-regular fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                    
+                    // Update sidebar count
+                    document.getElementById('sidebar-papers-count').textContent = data.files.length;
+                } else {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="3" class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-folder-open fs-1 mb-3 text-muted"></i>
+                                <p class="mb-0">No documents indexed in your library.</p>
+                            </td>
+                        </tr>
+                    `;
+                    document.getElementById('sidebar-papers-count').textContent = 0;
+                }
+            }
+        } catch (err) {
+            console.error("Refresh error:", err);
+        }
+    }
+</script>
+{% endblock %}

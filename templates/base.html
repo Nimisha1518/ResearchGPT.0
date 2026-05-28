@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ResearchGPT - AI Paper Assistant{% endblock %}</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="app-sidebar" id="appSidebar">
+            <div class="sidebar-header">
+                <div class="logo-area">
+                    <span class="logo-icon"><i class="fa-solid fa-microchip-ai text-gradient"></i></span>
+                    <h1 class="logo-text">Research<span class="text-gradient">GPT</span></h1>
+                </div>
+                <button class="sidebar-close-btn d-md-none" onclick="toggleSidebar()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <ul class="nav-list">
+                    <li class="nav-item">
+                        <a href="{{ url_for('home') }}" class="nav-link {% if request.path == '/' %}active{% endif %}" id="nav-home">
+                            <i class="fa-solid fa-house-chimney"></i>
+                            <span>Dashboard Home</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('upload_page') }}" class="nav-link {% if request.path == '/upload' %}active{% endif %}" id="nav-upload">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>Upload Papers</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('chat_page') }}" class="nav-link {% if request.path == '/chat' %}active{% endif %}" id="nav-chat">
+                            <i class="fa-solid fa-comments"></i>
+                            <span>AI Research Chat</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Uploaded Papers Panel inside Sidebar -->
+            <div class="sidebar-papers-section">
+                <div class="section-title-wrapper d-flex justify-content-between align-items-center px-3 mb-2">
+                    <span class="section-title">ACTIVE PAPERS</span>
+                    <span class="badge bg-primary-soft text-primary" id="sidebar-papers-count">{{ files|length }}</span>
+                </div>
+                <div class="sidebar-papers-list" id="sidebarPapersList">
+                    {% if files %}
+                        {% for file in files %}
+                            <div class="paper-item-sidebar d-flex align-items-center justify-content-between" title="{{ file.filename }}">
+                                <div class="paper-info d-flex align-items-center overflow-hidden">
+                                    <i class="fa-solid fa-file-pdf text-danger me-2 flex-shrink-0"></i>
+                                    <span class="paper-name text-truncate">{{ file.filename }}</span>
+                                </div>
+                                <button class="btn-icon-only text-danger-soft delete-paper-btn" onclick="deletePaper('{{ file.filename }}')">
+                                    <i class="fa-regular fa-trash-can"></i>
+                                </button>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-papers-state text-center py-3">
+                            <i class="fa-solid fa-folder-open text-muted mb-2"></i>
+                            <p class="text-muted small mb-0">No papers uploaded yet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="sidebar-footer mt-auto">
+                <div class="user-profile d-flex align-items-center">
+                    <div class="avatar me-2"><i class="fa-solid fa-user-astronaut"></i></div>
+                    <div class="profile-info overflow-hidden">
+                        <h6 class="profile-name mb-0 text-truncate">Researcher Mode</h6>
+                        <span class="profile-status"><span class="status-dot"></span> Gemini AI Active</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="app-main">
+            <!-- Glassmorphic Header -->
+            <header class="app-header d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <button class="sidebar-toggle-btn d-md-none me-3" onclick="toggleSidebar()">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <h2 class="page-title text-truncate">{% block page_title %}Dashboard{% endblock %}</h2>
+                </div>
+                <div class="header-actions d-flex align-items-center gap-3">
+                    <div class="api-status-badge d-flex align-items-center">
+                        <i class="fa-solid fa-key me-2"></i>
+                        <span id="api-status-text">Checking API...</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Content Area -->
+            <div class="content-viewport">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Core Helper JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    <!-- Base JavaScript -->
+    <script>
+        // Toggle Sidebar for Mobile
+        function toggleSidebar() {
+            const sidebar = document.getElementById('appSidebar');
+            sidebar.classList.toggle('active');
+        }
+
+        // Global function to delete paper
+        async function deletePaper(filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"? This will remove its indexed knowledge from the AI store.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    // Reload window to update state across templates
+                    window.location.reload();
+                } else {
+                    alert(`Error deleting paper: ${data.error}`);
+                }
+            } catch (err) {
+                console.error("Delete error:", err);
+                alert("Failed to delete paper. Check console logs.");
+            }
+        }
+
+        // Simple API Key status indicator
+        document.addEventListener('DOMContentLoaded', () => {
+            const statusText = document.getElementById('api-status-text');
+            const statusBadge = document.querySelector('.api-status-badge');
+            
+            // Check if Flask is serving config properly by testing a simple empty-history chat API call or looking for env variable
+            // Since we don't have a direct status check, we query /api/chat with empty params and check the response
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: 'test_api_key_check' })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.answer && data.answer.includes("Gemini API Key is missing")) {
+                    statusText.textContent = "API Key Missing";
+                    statusBadge.classList.add('bg-danger-soft', 'text-danger');
+                } else {
+                    statusText.textContent = "Gemini API Ready";
+                    statusBadge.classList.add('bg-success-soft', 'text-success');
+                }
+            })
+            .catch(() => {
+                statusText.textContent = "Server Offline";
+                statusBadge.classList.add('bg-warning-soft', 'text-warning');
+            });
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

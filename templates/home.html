@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Home - ResearchGPT{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Hero Banner Card -->
+    <div class="col-12">
+        <div class="glass-card hero-card d-flex align-items-center justify-content-between p-5 position-relative overflow-hidden">
+            <div class="hero-text-content position-relative z-index-2">
+                <span class="badge bg-primary-soft text-primary px-3 py-2 mb-3">Welcome to ResearchGPT</span>
+                <h2 class="display-5 fw-bold text-white mb-3">Explore, Chat, and Synthesize Your Research Papers</h2>
+                <p class="lead text-muted mb-4 max-width-600">
+                    A powerful Retrieval-Augmented Generation (RAG) platform designed to index academic journals, textbooks, and reports to answer questions with precision.
+                </p>
+                <div class="d-flex gap-3 flex-wrap">
+                    <a href="{{ url_for('upload_page') }}" class="btn btn-primary btn-lg px-4">
+                        <i class="fa-solid fa-cloud-arrow-up me-2"></i>Upload PDFs
+                    </a>
+                    <a href="{{ url_for('chat_page') }}" class="btn btn-outline-light btn-lg px-4">
+                        <i class="fa-solid fa-comments me-2"></i>Open Chat
+                    </a>
+                </div>
+            </div>
+            <!-- Interactive Floating Graphic (CSS styled inside style.css) -->
+            <div class="hero-graphic d-none d-lg-block">
+                <div class="glow-orb"></div>
+                <i class="fa-solid fa-brain-circuit graphic-icon"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Section -->
+    <div class="col-md-4">
+        <div class="glass-card stat-card p-4 d-flex align-items-center">
+            <div class="stat-icon-wrapper bg-primary-soft text-primary me-4">
+                <i class="fa-solid fa-file-pdf"></i>
+            </div>
+            <div>
+                <h3 class="stat-value text-white mb-1" id="stat-papers-count">{{ files|length }}</h3>
+                <p class="stat-label text-muted mb-0">Total Research Papers</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-card stat-card p-4 d-flex align-items-center">
+            <div class="stat-icon-wrapper bg-success-soft text-success me-4">
+                <i class="fa-solid fa-database"></i>
+            </div>
+            <div>
+                <h3 class="stat-value text-white mb-1">ChromaDB</h3>
+                <p class="stat-label text-muted mb-0">Vector Store Active</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="glass-card stat-card p-4 d-flex align-items-center">
+            <div class="stat-icon-wrapper bg-info-soft text-info me-4">
+                <i class="fa-solid fa-bolt"></i>
+            </div>
+            <div>
+                <h3 class="stat-value text-white mb-1">Gemini Pro</h3>
+                <p class="stat-label text-muted mb-0">AI Reasoning Engine</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Features Walkthrough -->
+    <div class="col-12 mt-5">
+        <h4 class="section-heading text-white mb-4">Powerful RAG Capabilities</h4>
+        <div class="row g-4">
+            <div class="col-md-6 col-lg-3">
+                <div class="glass-card feature-card p-4 h-100">
+                    <div class="feature-icon text-primary mb-3">
+                        <i class="fa-solid fa-magnifying-glass-chart"></i>
+                    </div>
+                    <h5 class="text-white mb-2">Semantic Extraction</h5>
+                    <p class="text-muted small mb-0">
+                        Automatically parses tables, figures, metadata, and core paragraphs from scholarly PDF structures.
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="glass-card feature-card p-4 h-100">
+                    <div class="feature-icon text-success mb-3">
+                        <i class="fa-solid fa-link-slash"></i>
+                    </div>
+                    <h5 class="text-white mb-2">Vector Embeddings</h5>
+                    <p class="text-muted small mb-0">
+                        Converts paragraphs to multi-dimensional vectors using HuggingFace's state-of-the-art embedding models.
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="glass-card feature-card p-4 h-100">
+                    <div class="feature-icon text-info mb-3">
+                        <i class="fa-solid fa-quote-right"></i>
+                    </div>
+                    <h5 class="text-white mb-2">Page-Level Citations</h5>
+                    <p class="text-muted small mb-0">
+                        Never worry about AI hallucinations. The chatbot references source chapters and specific pages for audit.
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="glass-card feature-card p-4 h-100">
+                    <div class="feature-icon text-warning mb-3">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <h5 class="text-white mb-2">Auto-Summaries</h5>
+                    <p class="text-muted small mb-0">
+                        Ingest a 40-page journal article and get a formatted brief covering methodology, findings, and conclusions instantly.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
