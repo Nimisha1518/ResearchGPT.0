@@ -1,8 +1,6 @@
-# 🧠 ResearchGPT
+# 🧠 ResearchGPT: AI-Powered Research Assistant
 
-**AI-powered research paper assistant** — upload PDFs, index them into a vector database, and ask citation-backed questions powered by Google Gemini.
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+ResearchGPT is a production-ready web application designed to help students, researchers, and professionals interact with their documents. Instead of manually reading through dense PDFs, users can upload their research papers, securely index them into a vector database, and ask natural language questions. Powered by Google Gemini and advanced RAG (Retrieval-Augmented Generation) techniques, every answer is backed by exact citations and page numbers from your uploaded documents.
 
 ---
 
@@ -80,8 +78,8 @@ graph TB
 ### 1. Clone and setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ResearchGPT.git
-cd ResearchGPT
+git clone https://github.com/Nimisha1518/ResearchGPT.0.git
+cd ResearchGPT.0
 python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # macOS/Linux
@@ -148,12 +146,15 @@ docker build -t researchgpt .
 docker run --env-file .env -p 5000:5000 researchgpt
 ```
 
-### Render (Recommended)
+### Render (Recommended for Free Tier)
 
-1. Fork this repo and connect it to [Render](https://render.com).
-2. Render will auto-detect `render.yaml` and create the web service + PostgreSQL database.
-3. Set required environment variables (`GEMINI_API_KEY`, etc.) in the Render dashboard.
-4. Deploy. The `/health` endpoint is used for health checks.
+This project is optimized for Render's free tier by utilizing a synchronous processing queue.
+
+1. Create a new **Web Service** on [Render](https://render.com) and connect this repository.
+2. Choose **Docker** as the environment (or let Render auto-detect the `Dockerfile`).
+3. Under Environment Variables, add your `GEMINI_API_KEY` and other necessary secrets.
+4. **Crucial for Free Tier:** Set `QUEUE_BACKEND` to `sync`. This processes PDFs directly in the web server, completely bypassing the need for a paid Background Worker or Redis instance!
+5. Save and Deploy.
 
 ### Production Environment Example
 
@@ -202,7 +203,6 @@ ResearchGPT/
 ├── gunicorn.conf.py         # Gunicorn production configuration
 ├── Dockerfile              # Container build instructions
 ├── Procfile                # Heroku/Render process definitions
-├── render.yaml             # Render Blueprint for one-click deploy
 ├── requirements.txt        # Python dependencies
 ├── templates/              # Jinja2 HTML templates
 │   ├── base.html           # Base layout with sidebar navigation
@@ -241,11 +241,3 @@ ResearchGPT/
 ## 📄 License
 
 This project is open source and available under the [MIT License](LICENSE).
-
----
-
-## 📝 Notes
-
-- The first embedding model load takes time as sentence-transformers downloads model weights (~80 MB).
-- Local uploads, SQLite data, Chroma files, virtual environments, and secrets are all ignored by git.
-- For a resume demo, deploy with Pinecone (`VECTOR_BACKEND=pinecone`) to avoid local disk dependencies.
