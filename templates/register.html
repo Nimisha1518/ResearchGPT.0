@@ -12,16 +12,16 @@
 
             <form method="POST">
                 <div class="mb-3">
-                    <label class="form-label text-muted small">Name</label>
-                    <input type="text" name="name" class="form-control bg-dark border-secondary text-white" required>
+                    <label for="name" class="form-label text-muted small">Full Name</label>
+                    <input type="text" id="name" name="name" class="form-control bg-dark border-secondary text-white" placeholder="e.g. Marie Curie" required>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small">Email</label>
-                    <input type="email" name="email" class="form-control bg-dark border-secondary text-white" required>
+                    <label for="email" class="form-label text-muted small">Email Address</label>
+                    <input type="email" id="email" name="email" class="form-control bg-dark border-secondary text-white" placeholder="name@example.com" required>
                 </div>
                 <div class="mb-4">
-                    <label class="form-label text-muted small">Password</label>
-                    <input type="password" name="password" minlength="8" class="form-control bg-dark border-secondary text-white" required>
+                    <label for="password" class="form-label text-muted small">Password</label>
+                    <input type="password" id="password" name="password" minlength="8" class="form-control bg-dark border-secondary text-white" placeholder="At least 8 characters" required>
                 </div>
                 <button type="submit" class="btn btn-primary w-100">Create Account</button>
             </form>
