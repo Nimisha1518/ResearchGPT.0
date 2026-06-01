@@ -1,13 +1,13 @@
 import os
-from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from vector_store_factory import create_vector_store
 
 class ResearchPaperRAG:
-    def __init__(self, chroma_db_dir, gemini_api_key=None):
-        self.chroma_db_dir = chroma_db_dir
+    def __init__(self, config, gemini_api_key=None):
+        self.config = config
         self.gemini_api_key = gemini_api_key
         
         print("Initializing Embeddings model (sentence-transformers/all-MiniLM-L6-v2)...")
@@ -16,21 +16,22 @@ class ResearchPaperRAG:
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
         
-        print(f"Initializing ChromaDB vector store at: {self.chroma_db_dir}")
-        # Initialize vector store
-        self.vector_store = Chroma(
-            persist_directory=self.chroma_db_dir,
-            embedding_function=self.embeddings
-        )
+        vector_backend = self.config.get("VECTOR_BACKEND") if isinstance(self.config, dict) else self.config.VECTOR_BACKEND
+        print(f"Initializing vector store backend: {vector_backend}")
+        self.vector_store = create_vector_store(self.config, self.embeddings)
 
-    def process_pdf(self, file_path):
+    @classmethod
+    def from_config(cls, config):
+        return cls(config, gemini_api_key=config.get("GEMINI_API_KEY") if isinstance(config, dict) else config.GEMINI_API_KEY)
+
+    def process_pdf(self, file_path, document_id=None, user_id=None, source_filename=None):
         """
         Loads a PDF file, splits it into chunks, and stores them in ChromaDB.
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
             
-        filename = os.path.basename(file_path)
+        filename = source_filename or os.path.basename(file_path)
         print(f"Loading and processing PDF: {filename}...")
         
         # Load PDF using PyPDFLoader
@@ -48,30 +49,54 @@ class ResearchPaperRAG:
         for chunk in chunks:
             chunk.metadata["source"] = filename
             chunk.metadata["filename"] = filename
+            if document_id is not None:
+                chunk.metadata["document_id"] = document_id
+            if user_id is not None:
+                chunk.metadata["user_id"] = user_id
             
         # Add to vector store
         self.vector_store.add_documents(chunks)
         print(f"Successfully processed {filename}. Ingested {len(chunks)} chunks into vector store.")
         return len(chunks)
 
-    def delete_paper(self, filename):
+    def _build_filter(self, user_id=None, filename=None, document_id=None):
+        filters = []
+        if user_id is not None:
+            filters.append({"user_id": user_id})
+        if filename:
+            filters.append({"source": filename})
+        if document_id is not None:
+            filters.append({"document_id": document_id})
+
+        if len(filters) == 1:
+            return filters[0]
+        if len(filters) > 1:
+            return {"$and": filters}
+        return None
+
+    def delete_paper(self, filename=None, user_id=None, document_id=None):
         """
         Deletes all chunks associated with a specific filename from ChromaDB.
         """
-        print(f"Deleting paper '{filename}' from vector store...")
+        print(f"Deleting paper '{filename or document_id}' from vector store...")
         try:
-            self.vector_store.delete(where={"source": filename})
-            print(f"Successfully deleted '{filename}' from vector store.")
+            where_filter = self._build_filter(user_id=user_id, filename=filename, document_id=document_id)
+            vector_backend = self.config.get("VECTOR_BACKEND") if isinstance(self.config, dict) else self.config.VECTOR_BACKEND
+            if vector_backend == "pinecone":
+                self.vector_store.delete(filter=where_filter)
+            else:
+                self.vector_store.delete(where=where_filter)
+            print(f"Successfully deleted '{filename or document_id}' from vector store.")
             return True
         except Exception as e:
             print(f"Error deleting paper from vector store: {e}")
             raise e
 
-    def retrieve_relevant_chunks(self, query, filter_filename=None, top_k=5):
+    def retrieve_relevant_chunks(self, query, filter_filename=None, top_k=5, user_id=None):
         """
         Retrieves top K chunks matching the query. Optional filter by filename.
         """
-        search_filter = {"source": filter_filename} if filter_filename else None
+        search_filter = self._build_filter(user_id=user_id, filename=filter_filename)
         
         # Perform similarity search with scores
         results = self.vector_store.similarity_search_with_relevance_scores(
@@ -111,7 +136,7 @@ Standalone Question:"""
         response = llm.invoke(prompt)
         return response.content.strip()
 
-    def answer_query(self, query, chat_history, filter_filename=None):
+    def answer_query(self, query, chat_history, filter_filename=None, user_id=None):
         """
         Answers a user query based on relevant document context.
         """
@@ -131,7 +156,7 @@ Standalone Question:"""
             
         # 2. Retrieve relevant chunks from ChromaDB
         try:
-            results = self.retrieve_relevant_chunks(standalone_query, filter_filename, top_k=5)
+            results = self.retrieve_relevant_chunks(standalone_query, filter_filename, top_k=5, user_id=user_id)
         except Exception as e:
             print(f"Error retrieving from ChromaDB: {e}")
             return {
@@ -204,7 +229,7 @@ AI Answer:"""
             "standalone_query": standalone_query
         }
 
-    def summarize_paper(self, filename):
+    def summarize_paper(self, filename, user_id=None):
         """
         Generates a summary of the paper by pulling sample chunks (beginning and end).
         """
@@ -213,12 +238,24 @@ AI Answer:"""
 
         try:
             # Query all chunks from the vector store matching filename
-            results = self.vector_store.get(where={"source": filename})
-            if not results or not results.get("documents"):
+            where_filter = self._build_filter(user_id=user_id, filename=filename)
+            vector_backend = self.config.get("VECTOR_BACKEND") if isinstance(self.config, dict) else self.config.VECTOR_BACKEND
+            if vector_backend != "pinecone" and hasattr(self.vector_store, "get"):
+                results = self.vector_store.get(where=where_filter)
+                docs = results.get("documents", []) if results else []
+                metadatas = results.get("metadatas", []) if results else []
+            else:
+                matches = self.retrieve_relevant_chunks(
+                    "abstract introduction methodology results findings conclusion",
+                    filter_filename=filename,
+                    top_k=8,
+                    user_id=user_id,
+                )
+                docs = [doc.page_content for doc, _score in matches]
+                metadatas = [doc.metadata for doc, _score in matches]
+
+            if not docs:
                 return "No content found for this file. Please make sure it was uploaded and processed correctly."
-                
-            docs = results["documents"]
-            metadatas = results["metadatas"]
             
             # Zip and sort by page number
             zipped = list(zip(docs, metadatas))
@@ -263,12 +300,12 @@ Structured Summary:"""
         except Exception as e:
             return f"Error generating summary: {str(e)}"
 
-    def semantic_search(self, query, filter_filename=None, top_k=5):
+    def semantic_search(self, query, filter_filename=None, top_k=5, user_id=None):
         """
         Runs similarity search and returns a serializable list of matches.
         """
         try:
-            results = self.retrieve_relevant_chunks(query, filter_filename, top_k)
+            results = self.retrieve_relevant_chunks(query, filter_filename, top_k, user_id=user_id)
             formatted_results = []
             for doc, score in results:
                 formatted_results.append({
@@ -281,4 +318,3 @@ Structured Summary:"""
         except Exception as e:
             print(f"Error in semantic search: {e}")
             raise e
-

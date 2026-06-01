@@ -10,7 +10,7 @@
         <div class="glass-card p-4">
             <h4 class="card-section-title text-white mb-3">Add Research Papers</h4>
             <p class="text-muted small mb-4">
-                Upload one or multiple research papers in PDF format. The system will automatically parse the text, generate vector embeddings, and store them in the Chroma vector database.
+                Upload one or multiple research papers in PDF format. The system will parse the text, generate vector embeddings, and track indexing status in the document library.
             </p>
             
             <!-- Upload Form -->
@@ -32,7 +32,7 @@
                 <div class="selected-files-list list-group mb-3" id="selectedFilesList"></div>
                 <div class="d-grid">
                     <button type="button" class="btn btn-primary" id="startUploadBtn">
-                        <i class="fa-solid fa-server me-2"></i>Index Files in ChromaDB
+                        <i class="fa-solid fa-server me-2"></i>Upload & Index
                     </button>
                 </div>
             </div>
@@ -68,6 +68,7 @@
                         <tr>
                             <th>Document Name</th>
                             <th>File Size</th>
+                            <th>Status</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -82,9 +83,10 @@
                                         </div>
                                     </td>
                                     <td><span class="text-muted small">{{ file.size_mb }} MB</span></td>
+                                    <td><span class="badge bg-{% if file.status == 'ready' %}success{% elif file.status == 'failed' %}danger{% else %}warning{% endif %}-soft">{{ file.status }}</span></td>
                                     <td class="text-end">
                                         <div class="d-flex gap-2 justify-content-end">
-                                            <button class="btn btn-sm btn-outline-info" onclick="summarizePaper('{{ file.filename }}')">
+                                            <button class="btn btn-sm btn-outline-info" onclick="summarizePaper('{{ file.filename }}')" {% if file.status != 'ready' %}disabled{% endif %}>
                                                 <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Summarize
                                             </button>
                                             <button class="btn btn-sm btn-icon-only btn-outline-danger" onclick="deletePaper('{{ file.filename }}')">
@@ -96,7 +98,7 @@
                             {% endfor %}
                         {% else %}
                             <tr id="empty-table-row">
-                                <td colspan="3" class="text-center py-5 text-muted">
+                                <td colspan="4" class="text-center py-5 text-muted">
                                     <i class="fa-solid fa-folder-open fs-1 mb-3 text-muted"></i>
                                     <p class="mb-0">No documents indexed in your library.</p>
                                 </td>
@@ -229,7 +231,8 @@
                 // Done! Refresh page to show files in table & sidebar
                 window.location.reload();
             } else {
-                alert("Upload failed: " + data.error);
+                const details = data.details && data.details.length ? `\n\n${data.details.join('\n')}` : '';
+                alert("Upload failed: " + data.error + details);
                 resetUploadView();
             }
         } catch (err) {
@@ -324,9 +327,10 @@
                                 </div>
                             </td>
                             <td><span class="text-muted small">${file.size_mb} MB</span></td>
+                            <td><span class="badge ${statusClass(file.status)}">${file.status}</span></td>
                             <td class="text-end">
                                 <div class="d-flex gap-2 justify-content-end">
-                                    <button class="btn btn-sm btn-outline-info" onclick="summarizePaper('${file.filename}')">
+                                    <button class="btn btn-sm btn-outline-info" onclick="summarizePaper('${file.filename}')" ${file.status !== 'ready' ? 'disabled' : ''}>
                                         <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Summarize
                                     </button>
                                     <button class="btn btn-sm btn-icon-only btn-outline-danger" onclick="deletePaper('${file.filename}')">
@@ -343,7 +347,7 @@
                 } else {
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="3" class="text-center py-5 text-muted">
+                            <td colspan="4" class="text-center py-5 text-muted">
                                 <i class="fa-solid fa-folder-open fs-1 mb-3 text-muted"></i>
                                 <p class="mb-0">No documents indexed in your library.</p>
                             </td>
@@ -355,6 +359,12 @@
         } catch (err) {
             console.error("Refresh error:", err);
         }
+    }
+
+    function statusClass(status) {
+        if (status === 'ready') return 'bg-success-soft text-success';
+        if (status === 'failed') return 'bg-danger-soft text-danger';
+        return 'bg-warning-soft text-warning';
     }
 </script>
 {% endblock %}

@@ -28,7 +28,9 @@
                     <option value="">All Uploaded Papers</option>
                     {% if files %}
                         {% for file in files %}
-                            <option value="{{ file.filename }}">{{ file.filename }}</option>
+                            <option value="{{ file.filename }}" {% if file.status != 'ready' %}disabled{% endif %}>
+                                {{ file.filename }}{% if file.status != 'ready' %} ({{ file.status }}){% endif %}
+                            </option>
                         {% endfor %}
                     {% endif %}
                 </select>

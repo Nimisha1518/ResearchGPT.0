@@ -9,6 +9,7 @@ __pycache__/
 
 uploads/
 data/chromadb/
+data/researchgpt.db
 models_out.txt
 
 .pytest_cache/

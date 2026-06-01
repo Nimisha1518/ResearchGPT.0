@@ -22,7 +22,7 @@
         <aside class="app-sidebar" id="appSidebar">
             <div class="sidebar-header">
                 <div class="logo-area">
-                    <span class="logo-icon"><i class="fa-solid fa-microchip-ai text-gradient"></i></span>
+                    <span class="logo-icon"><i class="fa-solid fa-brain text-gradient"></i></span>
                     <h1 class="logo-text">Research<span class="text-gradient">GPT</span></h1>
                 </div>
                 <button class="sidebar-close-btn d-md-none" onclick="toggleSidebar()">
@@ -32,6 +32,7 @@
             
             <nav class="sidebar-nav">
                 <ul class="nav-list">
+                    {% if current_user.is_authenticated %}
                     <li class="nav-item">
                         <a href="{{ url_for('home') }}" class="nav-link {% if request.path == '/' %}active{% endif %}" id="nav-home">
                             <i class="fa-solid fa-house-chimney"></i>
@@ -50,9 +51,24 @@
                             <span>AI Research Chat</span>
                         </a>
                     </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a href="{{ url_for('login') }}" class="nav-link {% if request.path == '/login' %}active{% endif %}">
+                            <i class="fa-solid fa-right-to-bracket"></i>
+                            <span>Login</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ url_for('register') }}" class="nav-link {% if request.path == '/register' %}active{% endif %}">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <span>Create Account</span>
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </nav>
 
+            {% if current_user.is_authenticated %}
             <div class="sidebar-divider"></div>
 
             <!-- Uploaded Papers Panel inside Sidebar -->
@@ -68,6 +84,9 @@
                                 <div class="paper-info d-flex align-items-center overflow-hidden">
                                     <i class="fa-solid fa-file-pdf text-danger me-2 flex-shrink-0"></i>
                                     <span class="paper-name text-truncate">{{ file.filename }}</span>
+                                    {% if file.status != 'ready' %}
+                                        <span class="badge bg-warning-soft text-warning ms-2">{{ file.status }}</span>
+                                    {% endif %}
                                 </div>
                                 <button class="btn-icon-only text-danger-soft delete-paper-btn" onclick="deletePaper('{{ file.filename }}')">
                                     <i class="fa-regular fa-trash-can"></i>
@@ -82,13 +101,20 @@
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
             
             <div class="sidebar-footer mt-auto">
                 <div class="user-profile d-flex align-items-center">
-                    <div class="avatar me-2"><i class="fa-solid fa-user-astronaut"></i></div>
+                    <div class="avatar me-2"><i class="fa-solid fa-user"></i></div>
                     <div class="profile-info overflow-hidden">
-                        <h6 class="profile-name mb-0 text-truncate">Researcher Mode</h6>
-                        <span class="profile-status"><span class="status-dot"></span> Gemini AI Active</span>
+                        <h6 class="profile-name mb-0 text-truncate">
+                            {% if current_user.is_authenticated %}{{ current_user.name }}{% else %}Guest{% endif %}
+                        </h6>
+                        {% if current_user.is_authenticated %}
+                            <a href="{{ url_for('logout') }}" class="profile-status text-decoration-none"><span class="status-dot"></span> Logout</a>
+                        {% else %}
+                            <span class="profile-status"><span class="status-dot"></span> Secure Mode</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -114,6 +140,15 @@
 
             <!-- Main Content Area -->
             <div class="content-viewport">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="mb-3">
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} mb-2">{{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
                 {% block content %}{% endblock %}
             </div>
         </main>
@@ -165,21 +200,24 @@
         document.addEventListener('DOMContentLoaded', () => {
             const statusText = document.getElementById('api-status-text');
             const statusBadge = document.querySelector('.api-status-badge');
+
+            {% if not current_user.is_authenticated %}
+            statusText.textContent = "Login Required";
+            statusBadge.classList.add('bg-warning-soft', 'text-warning');
+            return;
+            {% endif %}
             
-            // Check if Flask is serving config properly by testing a simple empty-history chat API call or looking for env variable
-            // Since we don't have a direct status check, we query /api/chat with empty params and check the response
-            fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: 'test_api_key_check' })
-            })
+            fetch('/api/status')
             .then(res => res.json())
             .then(data => {
-                if (data.answer && data.answer.includes("Gemini API Key is missing")) {
+                if (!data.success) {
+                    statusText.textContent = "Login Required";
+                    statusBadge.classList.add('bg-warning-soft', 'text-warning');
+                } else if (!data.gemini_configured) {
                     statusText.textContent = "API Key Missing";
                     statusBadge.classList.add('bg-danger-soft', 'text-danger');
                 } else {
-                    statusText.textContent = "Gemini API Ready";
+                    statusText.textContent = `${data.vector_backend.toUpperCase()} Ready`;
                     statusBadge.classList.add('bg-success-soft', 'text-success');
                 }
             })

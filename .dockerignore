@@ -1,0 +1,10 @@
+.git
+.env
+venv
+.venv
+__pycache__
+*.pyc
+uploads
+data/chromadb
+data/researchgpt.db
+.pytest_cache

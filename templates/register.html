@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Create Account - ResearchGPT{% endblock %}
+{% block page_title %}Create Account{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-5">
+        <div class="glass-card p-4">
+            <h3 class="text-white mb-2">Create your workspace</h3>
+            <p class="text-muted small mb-4">Your papers, vectors, and chat sessions stay isolated to your account.</p>
+
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Name</label>
+                    <input type="text" name="name" class="form-control bg-dark border-secondary text-white" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Email</label>
+                    <input type="email" name="email" class="form-control bg-dark border-secondary text-white" required>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label text-muted small">Password</label>
+                    <input type="password" name="password" minlength="8" class="form-control bg-dark border-secondary text-white" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Create Account</button>
+            </form>
+
+            <p class="text-muted small mt-3 mb-0">
+                Already registered? <a href="{{ url_for('login') }}" class="text-info">Login</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
